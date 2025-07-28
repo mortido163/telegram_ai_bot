@@ -1,34 +1,40 @@
 import os
 import logging
 from dotenv import load_dotenv
-from bot.constants import CACHE_TTL_HOURS
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 class Config:
-    # Обязательные переменные окружения
+    # Основные настройки
     TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     
-    # Опциональные переменные с значениями по умолчанию
-    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    # Настройки OpenAI
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-    CACHE_TTL = int(os.getenv("CACHE_TTL", CACHE_TTL_HOURS))
     
-    # Дополнительные настройки
+    # Настройки Redis
+    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    
+    # Настройки кэша
+    CACHE_TTL = int(os.getenv("CACHE_TTL", "3600"))
+    
+    # Настройки логирования
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    LOG_FORMAT = os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    
+    # Настройки запросов
     MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
     REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
     
-    # Владелец бота (ID пользователя Telegram)
+    # Настройки владельца
     BOT_OWNER_ID = os.getenv("BOT_OWNER_ID")
     
     @classmethod
     def validate(cls):
-        """Проверяет обязательные переменные окружения"""
+        """Проверяет наличие обязательных переменных окружения"""
         missing_vars = []
         
         if not cls.TELEGRAM_TOKEN:
@@ -42,15 +48,15 @@ class Config:
             raise ValueError(error_msg)
             
         logger.info("Configuration validated successfully")
-        return True
     
     @classmethod
     def get_providers(cls):
-        """Возвращает доступные провайдеры на основе настроек"""
+        """Возвращает список доступных AI провайдеров"""
         providers = {}
         
         if cls.OPENAI_API_KEY:
             providers["openai"] = "OpenAI"
+            
         if cls.DEEPSEEK_API_KEY:
             providers["deepseek"] = "DeepSeek"
             

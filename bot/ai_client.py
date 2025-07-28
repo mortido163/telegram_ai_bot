@@ -1,24 +1,20 @@
+import asyncio
+import time
 import base64
 import io
-import asyncio
-import requests
-import logging
-import time
+import aiohttp
 from typing import Optional
-from PIL import Image
-from config import Config
+import logging
 from openai import AsyncOpenAI
-
 from .cache import CacheManager
-from .constants import MODELS, ROLES, DEFAULT_PROMPT, DEFAULT_ROLE, DEFAULT_MODEL, CACHE_PREFIX_TEXT, CACHE_PREFIX_IMAGE
+from .constants import DEFAULT_MODEL, DEFAULT_ROLE, DEFAULT_PROMPT, MODELS, ROLES, CACHE_PREFIX_TEXT, CACHE_PREFIX_IMAGE
 from .metrics import metrics
+from config import Config
+from PIL import Image
 
 cache = CacheManager()
 aclient = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
 logger = logging.getLogger(__name__)
 
 class AIClient:
@@ -122,9 +118,8 @@ class AIClient:
                 model=Config.OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": ROLES[role]},
-                    {"role": "user", "content": text},
+                    {"role": "user", "content": text}
                 ],
-                temperature=0.7,
                 max_tokens=1000
             )
             return response.choices[0].message.content
@@ -133,24 +128,35 @@ class AIClient:
             return None
 
     async def _deepseek_text(self, text: str, role: str) -> Optional[str]:
-        headers = {
-            "Authorization": f"Bearer {Config.DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "deepseek-chat",
-            "messages": [
-                {"role": "system", "content": ROLES[role]},
-                {"role": "user", "content": text}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 1000
-        }
         try:
-            response = requests.post(self.deepseek_url, json=payload, headers=headers, timeout=30)
-            response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
-        except requests.RequestException as e:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {Config.DEEPSEEK_API_KEY}",
+            }
+
+            data = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": ROLES[role]},
+                    {"role": "user", "content": text}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.deepseek_url,
+                    headers=headers,
+                    json=data,
+                    timeout=30
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return result["choices"][0]["message"]["content"]
+                    else:
+                        raise Exception(f"DeepSeek API error: {response.status}")
+        except Exception as e:
             logger.error(f"Error processing text with DeepSeek: {e}")
             return None
 
@@ -160,7 +166,7 @@ class AIClient:
             buffered = io.BytesIO()
             image_b64.save(buffered, format="PNG")
             image_b64_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-
+            
             response = await aclient.chat.completions.create(
                 model="gpt-4-vision-preview",
                 messages=[

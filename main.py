@@ -22,8 +22,8 @@ from config import Config
 
 # Настройка логирования
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
-    level=getattr(logging, Config.LOG_LEVEL)
+    format=Config.LOG_FORMAT,
+    level=Config.get_log_level()
 )
 logger = logging.getLogger(__name__)
 

@@ -1,16 +1,9 @@
 import logging
-from telegram import (
-    Update,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton
-)
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from .constants import ROLES, BUTTON_TEXTS, MAX_MESSAGE_LENGTH, IMAGE_SIZE_LIMIT_MB
 from .metrics import metrics
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
 logger = logging.getLogger(__name__)
 
 def get_owner_manager(context: ContextTypes.DEFAULT_TYPE):
