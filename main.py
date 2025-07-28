@@ -40,6 +40,7 @@ def shutdown(signal, frame):
 
 async def shutdown_async():
     if "application" in globals():
+        await application.stop()
         await application.shutdown()
     sys.exit(0)
     
@@ -92,7 +93,8 @@ async def main() -> None:
         application.add_error_handler(error_handler)
 
         logger.info("Bot started successfully")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
 
         while True:
             await asyncio.sleep(1)

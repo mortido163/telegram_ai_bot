@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Обновляем систему и устанавливаем необходимые пакеты в одном слое
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --no-install-recommends --fix-missing\
         ca-certificates \
         libjpeg-dev \
         zlib1g-dev \
