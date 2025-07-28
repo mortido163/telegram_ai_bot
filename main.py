@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import signal
 import sys
@@ -30,10 +31,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def shutdown(signal, frame):
+async def shutdown():
     logger.info("Shutting down...")
-    application.stop()
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(shutdown_async())
+    else:
+        asyncio.run(shutdown_async())
     sys.exit(0)
+
+
+async def shutdown_async():
+    await application.shutdown()
+    sys.exit(0)
+    
 
 async def main() -> None:
     global application
@@ -43,6 +54,7 @@ async def main() -> None:
         
         # Создание приложения
         application = Application.builder().token(Config.TELEGRAM_TOKEN).build()
+        application.initialize()
 
         # Инициализация менеджера владельца
         owner_manager = OwnerManager(application)
@@ -96,6 +108,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    import asyncio
     signal.signal(signal.SIGINT, shutdown)
     asyncio.run(main())
