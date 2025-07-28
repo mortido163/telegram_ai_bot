@@ -1,0 +1,81 @@
+import os
+import logging
+from dotenv import load_dotenv
+from bot.constants import CACHE_TTL_HOURS
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+class Config:
+    # Обязательные переменные окружения
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+    
+    # Опциональные переменные с значениями по умолчанию
+    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    CACHE_TTL = int(os.getenv("CACHE_TTL", CACHE_TTL_HOURS))
+    
+    # Дополнительные настройки
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+    REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
+    
+    # Владелец бота (ID пользователя Telegram)
+    BOT_OWNER_ID = os.getenv("BOT_OWNER_ID")
+    
+    @classmethod
+    def validate(cls):
+        """Проверяет обязательные переменные окружения"""
+        missing_vars = []
+        
+        if not cls.TELEGRAM_TOKEN:
+            missing_vars.append("TELEGRAM_BOT_TOKEN")
+        if not cls.OPENAI_API_KEY:
+            missing_vars.append("OPENAI_API_KEY")
+            
+        if missing_vars:
+            error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        logger.info("Configuration validated successfully")
+        return True
+    
+    @classmethod
+    def get_providers(cls):
+        """Возвращает доступные провайдеры на основе настроек"""
+        providers = {}
+        
+        if cls.OPENAI_API_KEY:
+            providers["openai"] = "OpenAI"
+        if cls.DEEPSEEK_API_KEY:
+            providers["deepseek"] = "DeepSeek"
+            
+        return providers
+    
+    @classmethod
+    def is_owner(cls, user_id: int, bot_instance=None) -> bool:
+        """Проверяет, является ли пользователь владельцем бота"""
+        # Сначала проверяем переменную окружения
+        if cls.BOT_OWNER_ID:
+            try:
+                owner_id = int(cls.BOT_OWNER_ID)
+                return user_id == owner_id
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid BOT_OWNER_ID: {cls.BOT_OWNER_ID}")
+        
+        # Если есть экземпляр бота, используем его для получения информации
+        if bot_instance:
+            try:
+                bot_info = bot_instance.get_me()
+                # В Telegram API нет прямого способа получить владельца бота
+                # Но мы можем использовать логику определения первого пользователя
+                logger.info(f"Bot info: {bot_info.id} - {bot_info.first_name}")
+                return False  # По умолчанию возвращаем False для безопасности
+            except Exception as e:
+                logger.error(f"Error getting bot info: {e}")
+        
+        return False

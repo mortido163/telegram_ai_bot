@@ -1,0 +1,10 @@
+requests>=2.31.0
+python-telegram-bot==20.6
+openai>=1.0.0
+pillow>=10.0.0
+redis>=4.5.0
+python-dotenv>=1.0.0
+aiohttp>=3.8.0
+# Дополнительные зависимости для продакшена
+cryptography>=41.0.0
+certifi>=2023.7.22
