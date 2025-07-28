@@ -1,4 +1,6 @@
 import logging
+import signal
+import sys
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -28,7 +30,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def shutdown(signal, frame):
+    logger.info("Shutting down...")
+    application.stop()
+    sys.exit(0)
+
 async def main() -> None:
+    global application
     try:
         # Валидация конфигурации
         Config.validate()
@@ -74,7 +82,10 @@ async def main() -> None:
         application.add_error_handler(error_handler)
 
         logger.info("Bot started successfully")
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+        while True:
+            await asyncio.sleep(1)
         
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
@@ -86,4 +97,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
+    signal.signal(signal.SIGINT, shutdown)
     asyncio.run(main())
