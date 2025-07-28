@@ -85,3 +85,15 @@ class Config:
                 logger.error(f"Error getting bot info: {e}")
         
         return False
+
+    @classmethod
+    def get_log_level(cls) -> int:
+        """Возвращает уровень логирования"""
+        level_map = {
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL
+        }
+        return level_map.get(cls.LOG_LEVEL.upper(), logging.WARNING)
