@@ -11,9 +11,14 @@ class Config:
     TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+    DEEPSEEK_URL = os.getenv("DEEPSEEK_URL", "https://api.deepseek.com/v1/chat/completions")
+
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+    OPENROUTER_URL = os.getenv("OPENROUTER_URL", "https://openrouter.ai/api/v1")
     
-    # Настройки OpenAI
+    # Настройки Моделей
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/auto")
     
     # Настройки Redis
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -59,6 +64,9 @@ class Config:
             
         if cls.DEEPSEEK_API_KEY:
             providers["deepseek"] = "DeepSeek"
+
+        if cls.OPENROUTER_API_KEY:
+            providers["openrouter"] = "OpenRouter"
             
         return providers
     

@@ -1,7 +1,6 @@
 import logging
 from typing import Optional, Set
-from telegram import Bot
-from telegram.ext import Application
+from aiogram import Bot
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -9,9 +8,8 @@ logger = logging.getLogger(__name__)
 class OwnerManager:
     """Менеджер для управления владельцем бота"""
     
-    def __init__(self, application: Application):
-        self.application = application
-        self.bot: Bot = application.bot
+    def __init__(self, bot: Bot):
+        self.bot = bot
         self._owner_id: Optional[int] = None
         self._admin_ids: Set[int] = set()
         
@@ -40,18 +38,8 @@ class OwnerManager:
     async def _detect_owner(self):
         """Автоматическое определение владельца бота"""
         try:
-            # Получаем обновления для определения первого пользователя
-            updates = await self.bot.get_updates(limit=1)
-            if updates:
-                first_update = updates[0]
-                if hasattr(first_update, 'message') and first_update.message:
-                    user = first_update.message.from_user
-                    self._owner_id = user.id
-                    logger.info(f"Auto-detected owner ID: {self._owner_id} ({user.first_name})")
-                elif hasattr(first_update, 'callback_query') and first_update.callback_query:
-                    user = first_update.callback_query.from_user
-                    self._owner_id = user.id
-                    logger.info(f"Auto-detected owner ID from callback: {self._owner_id} ({user.first_name})")
+            # Владелец должен быть установлен через конфигурацию или явно через set_owner
+            logger.warning("Auto-detection of owner is not supported in aiogram 3.x")
         except Exception as e:
             logger.error(f"Error detecting owner: {e}")
     

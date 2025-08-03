@@ -1,70 +1,65 @@
 import asyncio
 import logging
-import signal
 import sys
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters
-)
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
+
 from bot.ai_client import AIClient
 from bot.owner_manager import OwnerManager
-from bot.handlers import (
-    start,
-    button_handler,
-    show_settings,
-    show_stats,
-    handle_text,
-    handle_image,
-    error_handler
-)
 from config import Config
+from handlers.base import router as base_router
+from handlers.settings import router as settings_router, WorkflowMiddleware as SettingsWorkflowMiddleware
+from handlers.ai import router as ai_router, WorkflowMiddleware as AIWorkflowMiddleware
 
-# Настройка логирования
 logging.basicConfig(
     format=Config.LOG_FORMAT,
     level=Config.get_log_level()
 )
 logger = logging.getLogger(__name__)
 
+# Initialize storage, bot and dispatcher
+storage = MemoryStorage()
+bot = Bot(token=Config.TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher(storage=storage)
 
-def shutdown(signal, frame):
-    logger.info("Shutting down...")
-    loop = asyncio.get_event_loop()
-    loop.create_task(shutdown_async())
-    sys.exit(0)
+# Initialize workflow data
+dp.workflow_data = {}
 
+# Set up middleware
+settings_router.message.middleware(SettingsWorkflowMiddleware(dp))
+settings_router.callback_query.middleware(SettingsWorkflowMiddleware(dp))
 
-async def shutdown_async():
-    if "application" in globals():
-        await application.stop()
-        await application.shutdown()
-    sys.exit(0)
-    
+# Set up AI middleware
+ai_router.message.middleware(AIWorkflowMiddleware(dp))
+ai_router.callback_query.middleware(AIWorkflowMiddleware(dp))
+ai_router.edited_message.middleware(AIWorkflowMiddleware(dp))
+ai_router.error.middleware(AIWorkflowMiddleware(dp))
 
-async def main() -> None:
-    global application
+# Include routers
+dp.include_router(base_router)
+dp.include_router(settings_router)
+dp.include_router(ai_router)
+
+async def startup(dispatcher: Dispatcher):
+    """Startup actions"""
     try:
-        # Валидация конфигурации
+        # Validate configuration
         Config.validate()
         
-        # Создание приложения
-        application = Application.builder().token(Config.TELEGRAM_TOKEN).build()
-        await application.initialize()
-
-        # Инициализация менеджера владельца
-        owner_manager = OwnerManager(application)
+        # Initialize owner manager
+        owner_manager = OwnerManager(bot)
         await owner_manager.initialize()
-        application.bot_data["owner_manager"] = owner_manager
         
-        # Инициализация AI клиента
+        # Initialize AI client
         ai_client = AIClient()
-        application.bot_data["ai_client"] = ai_client
         
-        # Проверяем доступные провайдеры
+        # Set data in dispatcher
+        dispatcher.workflow_data["owner_manager"] = owner_manager
+        dispatcher.workflow_data["ai_client"] = ai_client
+        
+        # Check available providers
         available_providers = Config.get_providers()
         if not available_providers:
             logger.error("No AI providers configured!")
@@ -72,41 +67,42 @@ async def main() -> None:
             
         logger.info(f"Available AI providers: {list(available_providers.keys())}")
         
-        # Логируем информацию о владельце
+        # Log owner information
         owner_id = owner_manager.get_owner_id()
         if owner_id:
             logger.info(f"Bot owner ID: {owner_id}")
         else:
             logger.warning("No bot owner detected")
-
-        # Регистрация обработчиков команд
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("settings", show_settings))
-        application.add_handler(CommandHandler("stats", show_stats))
-
-        # Регистрация обработчиков сообщений
-        application.add_handler(CallbackQueryHandler(button_handler))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-        application.add_handler(MessageHandler(filters.PHOTO, handle_image))
-
-        # Обработчик ошибок
-        application.add_error_handler(error_handler)
-
-        logger.info("Bot started successfully")
-        await application.start()
-        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-
-        while True:
-            await asyncio.sleep(1)
-        
+            
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
-        return
+        raise
     except Exception as e:
         logger.error(f"Failed to start bot: {e}")
-        return
+        raise
 
+async def shutdown(dispatcher: Dispatcher):
+    """Shutdown actions"""
+    logger.info("Shutting down...")
+    await bot.session.close()
+
+async def main():
+    """Main function to start the bot"""
+    try:
+        # Set up startup and shutdown handlers
+        dp.startup.register(startup)
+        dp.shutdown.register(shutdown)
+        
+        # Start polling
+        logger.info("Starting bot...")
+        await dp.start_polling(bot)
+        
+    except Exception as e:
+        logger.error(f"Error running bot: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, shutdown)
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped!")

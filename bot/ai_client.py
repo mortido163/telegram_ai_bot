@@ -1,26 +1,27 @@
+import aiohttp
 import asyncio
-import time
 import base64
 import io
-import aiohttp
-from typing import Optional
 import logging
-from openai import AsyncOpenAI
+import time
 from .cache import CacheManager
 from .constants import DEFAULT_MODEL, DEFAULT_ROLE, DEFAULT_PROMPT, MODELS, ROLES, CACHE_PREFIX_TEXT, CACHE_PREFIX_IMAGE
 from .metrics import metrics
 from config import Config
+from openai import AsyncOpenAI
 from PIL import Image
+from typing import Optional
 
 cache = CacheManager()
 aclient = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
+or_client = AsyncOpenAI(base_url=Config.OPENROUTER_URL, api_key=Config.OPENROUTER_API_KEY)
 
 logger = logging.getLogger(__name__)
 
 class AIClient:
     def __init__(self):
         self.active_provider = DEFAULT_MODEL
-        self.deepseek_url = "https://api.deepseek.com/v1/chat/completions"
+        self.deepseek_url = Config.DEEPSEEK_URL
         self.max_retries = 3
         self.retry_delay = 1
 
@@ -30,6 +31,9 @@ class AIClient:
 
         if provider == "deepseek" and not Config.DEEPSEEK_API_KEY:
             raise ValueError("DeepSeek API key not configured")
+
+        if provider == "openrouter" and not Config.OPENROUTER_API_KEY:
+            raise ValueError("OpenRouter API key not configured")
 
         self.active_provider = provider
         logger.info(f"Provider changed to: {provider}")
@@ -52,8 +56,10 @@ class AIClient:
             try:
                 if self.active_provider == "openai":
                     response = await self._openai_text(text, role)
-                else:
+                elif self.active_provider == "deepseek":
                     response = await self._deepseek_text(text, role)
+                else:
+                    response = await self._openrouter_text(text, role)
                 
                 response_time = time.time() - start_time
                 
@@ -158,6 +164,22 @@ class AIClient:
                         raise Exception(f"DeepSeek API error: {response.status}")
         except Exception as e:
             logger.error(f"Error processing text with DeepSeek: {e}")
+            return None
+
+    async def _openrouter_text(self, text: str, role: str) -> Optional[str]:
+        try:
+            response = await or_client.chat.completions.create(
+                model=Config.OPENAI_MODEL,
+                extra_body={},
+                messages=[
+                    {"role": "system", "content": ROLES[role]},
+                    {"role": "user", "content": text}
+                ],
+                max_tokens=1000
+            )
+            return f"{response.model}: {response.choices[0].message.content}"
+        except Exception as e:
+            logger.error(f"Error processing text with OpenAI: {e}")
             return None
 
     async def _openai_vision(self, image_bytes: bytes, prompt: str) -> Optional[str]:

@@ -8,7 +8,8 @@ BUTTON_TEXTS = {
     },
     "models": {
         "openai": "🟢 OpenAI",
-        "deepseek": "🔵 DeepSeek"
+        "deepseek": "🔵 DeepSeek",
+        "openrouter": "⚪ OpenRouter"
     }
 }
 
@@ -20,6 +21,10 @@ MODELS = {
     "deepseek": {
         "text": ["deepseek-chat"],
         "vision": []  # На момент написания DeepSeek не поддерживает vision
+    },
+    "openrouter": {
+        "text": ["deepseek-r1-0528"],
+        "vision": []
     }
 }
 
