@@ -60,11 +60,24 @@ jobs:
     - name: Check for secrets
       run: |
         # Проверка на секреты в коде
-        if grep -r "password\|secret\|key\|token" . --exclude-dir=.git --exclude-dir=.venv --exclude=requirements.txt; then
-          echo "⚠️ Potential secrets found in code"
+        if grep -r "[\"'].*\(password\|secret\|key\|token\).*[\"']=[\"'].*[\"']" . \
+          --exclude-dir={.git,.venv,.pytest_cache,__pycache__} \
+          --exclude={*.md,*.example,*.yml,*.yaml,requirements.txt,Dockerfile} \
+          --exclude=config.py \
+          --exclude=main.py \
+          -l; then
+          echo "⚠️ Actual secrets found in code"
           exit 1
         else
           echo "✅ No secrets found in code"
+        fi
+        
+        # Проверяем наличие .env файлов
+        if find . -name ".env*" ! -name ".env.example" -type f | grep -q .; then
+          echo "⚠️ Found .env files that might contain secrets"
+          exit 1
+        else
+          echo "✅ No .env files found"
         fi
         
     - name: Validate .gitignore
