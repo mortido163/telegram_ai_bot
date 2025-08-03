@@ -41,7 +41,19 @@ jobs:
         mypy bot/ || true
         
     - name: Test imports
+      env:
+        OPENAI_API_KEY: "test_key"
+        TELEGRAM_TOKEN: "test_token"
+        DEEPSEEK_API_KEY: "test_key"
+        REDIS_HOST: "dummy"
+        REDIS_PORT: "6379"
+        REDIS_DB: "0"
+        LOG_LEVEL: "INFO"
       run: |
+        # Создаем mock для Redis
+        sed -i 's/redis.Redis/Mock/g' bot/cache.py
+        sed -i '1iclass Mock:\n    def __init__(self, *args, **kwargs):\n        pass\n    async def get(self, *args):\n        return None\n    async def set(self, *args):\n        pass\n    async def delete(self, *args):\n        pass' bot/cache.py
+        
         # Проверка импортов
         python -c "import bot; print('✅ All modules imported successfully')"
         python -c "import config; print('✅ Config imported successfully')"
