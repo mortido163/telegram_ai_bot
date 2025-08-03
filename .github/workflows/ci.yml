@@ -49,9 +49,10 @@ jobs:
         REDIS_PORT: "6379"
         REDIS_DB: "0"
         LOG_LEVEL: "INFO"
+        PYTHONPATH: ${{ github.workspace }}
       run: |
-        # Создаем директорию для тестов если её нет
-        mkdir -p tests
+        # Проверяем структуру проекта
+        ls -la
         
         # Запускаем тест импортов
         python tests/test_imports.py
