@@ -1,0 +1,34 @@
+[tool.pytest.ini_options]
+# Настройки pytest для проекта telegram_ai_bot
+minversion = "8.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+    "--tb=short",
+    "--asyncio-mode=auto"
+]
+
+# Маркировка тестов
+markers = [
+    "unit: Быстрые модульные тесты без внешних зависимостей",
+    "integration: Интеграционные тесты с Redis и полной системой",
+    "slow: Медленные тесты (> 30 секунд)",
+    "performance: Тесты производительности"
+]
+
+# Пути к тестам
+testpaths = ["tests"]
+
+# Конфигурация для asyncio
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+# Игнорируемые предупреждения
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning"
+]
+
+# Минимальное покрытие кода
+# addopts = ["--cov=bot", "--cov=handlers", "--cov-report=html", "--cov-report=term"]

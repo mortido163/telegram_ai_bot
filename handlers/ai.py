@@ -1,6 +1,7 @@
 import logging
 from aiogram import Router, F, types, Dispatcher
 from aiogram.fsm.context import FSMContext
+from aiogram.types import ErrorEvent
 from typing import Any, Dict, Callable, Awaitable
 from aiogram.types import TelegramObject
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
@@ -33,7 +34,24 @@ class WorkflowMiddleware(BaseMiddleware):
         try:
             return await handler(event, data)
         except Exception as e:
-            logger.error(f"Error in middleware: {e}")
+            # Проверяем тип ошибки для более конкретного логирования
+            error_message = str(e)
+            if "message is not modified" in error_message:
+                # Это частая ошибка, не выводим полные детали
+                logger.warning("Attempted to edit message with same content")
+            elif "query is too old" in error_message or "query ID is invalid" in error_message:
+                # Устаревший callback query, это нормальная ситуация
+                logger.warning("Callback query expired or invalid")
+            elif "Bad Request" in error_message and "timeout" in error_message:
+                # Таймаут запроса, тоже частая ситуация
+                logger.warning("Request timeout from Telegram API")
+            else:
+                # Логируем только ключевые детали, без полного содержимого
+                event_type = type(event).__name__
+                if hasattr(event, 'update_id'):
+                    logger.error(f"Error in AI middleware for {event_type} (update_id: {event.update_id}): {e}")
+                else:
+                    logger.error(f"Error in AI middleware for {event_type}: {e}")
             raise
 
 
@@ -61,7 +79,7 @@ async def handle_text(message: types.Message, state: FSMContext, **kwargs):
         processing_msg = await message.answer("🤔 Обрабатываю запрос...")
 
         try:
-            answer = await ai_client.process_text(message.text, role)
+            answer = await ai_client.get_response(message.text, message.from_user.id, role)
 
             # Split long responses
             if len(answer) > MAX_MESSAGE_LENGTH:
@@ -105,7 +123,7 @@ async def handle_image(message: types.Message, state: FSMContext, **kwargs):
             photo_bytes = await message.bot.download_file(photo_file.file_path)
             user_prompt = message.caption
 
-            answer = await ai_client.process_image(photo_bytes, user_prompt)
+            answer = await ai_client.process_image_with_limit(photo_bytes, message.from_user.id, user_prompt)
 
             # Split long responses
             if len(answer) > MAX_MESSAGE_LENGTH:
@@ -127,13 +145,45 @@ async def handle_image(message: types.Message, state: FSMContext, **kwargs):
         await message.answer("⚠️ Ошибка обработки изображения")
 
 
-@router.error()
-async def error_handler(update: types.Update, exception: Exception):
+@router.errors()
+async def error_handler(event: types.ErrorEvent):
     """Handle errors"""
-    logger.error(f"Update {update} caused error {exception}")
+    update = event.update
+    exception = event.exception
+    
+    # Более компактное логирование ошибок
+    error_message = str(exception)
+    if "message is not modified" in error_message:
+        logger.warning("Attempted to edit message with same content")
+        return  # Не отправляем сообщение пользователю для этой ошибки
+    
+    # Логируем только важную информацию без полного содержимого
+    update_type = "unknown"
+    update_id = "unknown"
+    
+    if hasattr(update, 'update_id'):
+        update_id = update.update_id
+    
+    if update.message:
+        update_type = "message"
+    elif update.callback_query:
+        update_type = "callback_query"
+    elif update.edited_message:
+        update_type = "edited_message"
+    
+    logger.error(f"Update {update_type} (ID: {update_id}) caused error: {error_message}")
 
     error_msg = "⚠️ Произошла ошибка. Пожалуйста, попробуйте позже."
+    
     if update.message:
-        await update.message.answer(error_msg)
+        try:
+            await update.message.answer(error_msg)
+        except Exception as e:
+            logger.error(f"Failed to send error message: {e}")
     elif update.callback_query:
-        await update.callback_query.answer(error_msg, show_alert=True)
+        try:
+            await update.callback_query.answer(error_msg, show_alert=True)
+        except Exception as e:
+            logger.error(f"Failed to send error callback: {e}")
+    else:
+        logger.error(f"No way to send error message for update: {update}")

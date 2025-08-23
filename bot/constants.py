@@ -10,6 +10,14 @@ BUTTON_TEXTS = {
         "openai": "🟢 OpenAI",
         "deepseek": "🔵 DeepSeek",
         "openrouter": "⚪ OpenRouter"
+    },
+    "reminders": {
+        "create": "📝 Создать напоминание",
+        "list": "📋 Мои напоминания",
+        "settings": "⚙️ Настройки",
+        "simple": "📝 Обычное",
+        "ai_query": "🤖 AI-запрос",
+        "back": "◀️ Назад"
     }
 }
 

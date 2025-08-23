@@ -35,6 +35,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Копируем остальные файлы проекта
 COPY . .
 
+# Делаем healthcheck скрипт исполняемым
+RUN chmod +x healthcheck.py
+
 # Устанавливаем переменные окружения
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app

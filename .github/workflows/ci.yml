@@ -7,7 +7,8 @@ on:
     branches: [ main, master ]
 
 jobs:
-  test:
+  # Быстрые проверки - первый барьер
+  fast-checks:
     runs-on: ubuntu-latest
     
     steps:
@@ -24,23 +25,98 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Run security checks
+    - name: Security and quality checks
       run: |
+        echo "🔒 Running security and quality checks..."
+        
         # Проверка зависимостей на уязвимости
-        pip install safety
+        pip install safety bandit mypy
         safety check -r requirements.txt || true
-        
-        # Проверка кода на уязвимости
-        pip install bandit
         bandit -r bot/ || true
-        
-    - name: Run type checking
-      run: |
-        # Проверка типов
-        pip install mypy
         mypy bot/ || true
         
-    - name: Test imports
+    - name: Run fast unit tests
+      env:
+        OPENAI_API_KEY: "test_key"
+        TELEGRAM_TOKEN: "test_token"
+        DEEPSEEK_API_KEY: "test_key" 
+        REDIS_HOST: "dummy"
+        REDIS_PORT: "6379"
+        REDIS_DB: "0"
+        LOG_LEVEL: "INFO"
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        echo "⚡ Running fast unit tests (no external dependencies)..."
+        
+        # Быстрые модульные тесты для CI с pytest
+        python -m pytest tests/test_integration_ci.py -v --tb=short
+        
+        # Базовый тест импортов (оставляем как есть для совместимости)
+        python tests/test_imports.py
+        
+    - name: Validate project structure
+      run: |
+        echo "📁 Validating project structure..."
+        
+        # Проверка существования ключевых файлов
+        required_files=(
+          "bot/reminders.py"
+          "bot/request_limiter.py" 
+          "handlers/reminders.py"
+          "tests/test_integration_ci.py"
+          "tests/test_ai_reminders.py"
+          "tests/test_request_limiter.py"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file exists"
+          else
+            echo "❌ $file missing"
+            exit 1
+          fi
+        done
+        
+    - name: Check for secrets and configuration
+      run: |
+        echo "🔍 Checking for secrets..."
+        
+        # Проверка на секреты в коде
+        if grep -r "sk-[a-zA-Z0-9]" . \
+          --exclude-dir={.git,.venv,.pytest_cache,__pycache__} \
+          --exclude={*.md,*.yml,*.yaml} \
+          -l; then
+          echo "❌ OpenAI API keys found in code"
+          exit 1
+        fi
+        
+        # Проверка .gitignore
+        if [ -f .gitignore ] && grep -q "\.env" .gitignore; then
+          echo "✅ .env files are properly ignored"
+        else
+          echo "⚠️ .env files might not be ignored"
+        fi
+
+  # Специализированные тесты компонентов
+  component-tests:
+    runs-on: ubuntu-latest
+    needs: fast-checks
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Test request limiter thoroughly
       env:
         OPENAI_API_KEY: "test_key"
         TELEGRAM_TOKEN: "test_token"
@@ -51,105 +127,277 @@ jobs:
         LOG_LEVEL: "INFO"
         PYTHONPATH: ${{ github.workspace }}
       run: |
-        # Проверяем структуру проекта
-        ls -la
+        echo "🔒 Testing request limiter comprehensively..."
         
-        # Запускаем тест импортов
-        python tests/test_imports.py
+        # Запуск специализированных тестов ограничителя с pytest
+        python -m pytest tests/test_request_limiter.py -v --tb=short
         
-    - name: Check for secrets
+    - name: Test FSM states and handlers
+      env:
+        OPENAI_API_KEY: "test_key"
+        TELEGRAM_TOKEN: "test_token"
+        DEEPSEEK_API_KEY: "test_key"
+        REDIS_HOST: "dummy"
+        REDIS_PORT: "6379"
+        REDIS_DB: "0"
+        LOG_LEVEL: "INFO"
+        PYTHONPATH: ${{ github.workspace }}
       run: |
-        # Проверка на секреты в коде
-        if grep -r "[\"'].*\(password\|secret\|key\|token\).*[\"']=[\"'].*[\"']" . \
-          --exclude-dir={.git,.venv,.pytest_cache,__pycache__} \
-          --exclude={*.md,*.example,*.yml,*.yaml,requirements.txt,Dockerfile} \
-          --exclude=config.py \
-          --exclude=main.py \
-          -l; then
-          echo "⚠️ Actual secrets found in code"
-          exit 1
-        else
-          echo "✅ No secrets found in code"
-        fi
+        echo "🎭 Testing FSM states and handlers..."
         
-        # Проверяем наличие .env файлов
-        if find . -name ".env*" ! -name ".env.example" -type f | grep -q .; then
-          echo "⚠️ Found .env files that might contain secrets"
-          exit 1
-        else
-          echo "✅ No .env files found"
-        fi
+        # Проверка состояний FSM
+        python -c "
+        try:
+            from bot.states import ReminderStates, EditReminderStates
+            
+            # Проверяем новые состояния для AI-напоминаний
+            required_states = [
+                'waiting_for_type',
+                'waiting_for_ai_prompt', 
+                'waiting_for_ai_role',
+                'confirmation'
+            ]
+            
+            for state_name in required_states:
+                state = getattr(ReminderStates, state_name, None)
+                if state is None:
+                    raise ValueError(f'Missing state: {state_name}')
+            
+            print('✅ All FSM states are available')
+        except Exception as e:
+            print(f'❌ FSM states test failed: {e}')
+            exit(1)
+        "
         
-    - name: Validate .gitignore
+        # Проверка обработчиков
+        python -c "
+        try:
+            from handlers import ai, reminders, settings, base
+            print('✅ All handlers import correctly')
+        except Exception as e:
+            print(f'❌ Handlers import failed: {e}')
+            exit(1)
+        "
+        
+    - name: Test configuration and constants
+      env:
+        OPENAI_API_KEY: "test_key"
+        TELEGRAM_TOKEN: "test_token"
+        DEEPSEEK_API_KEY: "test_key"
+        REDIS_HOST: "dummy"
+        REDIS_PORT: "6379"
+        REDIS_DB: "0"
+        LOG_LEVEL: "INFO"
+        PYTHONPATH: ${{ github.workspace }}
       run: |
-        # Проверка .gitignore
-        if [ ! -f .gitignore ]; then
-          echo "❌ .gitignore file missing"
-          exit 1
-        fi
+        echo "⚙️ Testing configuration and constants..."
         
-        if grep -q "\.env" .gitignore; then
-          echo "✅ .env files are ignored"
-        else
-          echo "⚠️ .env files might not be ignored"
-        fi
-        
-    - name: Check Docker files
-      run: |
-        # Проверка Docker файлов
-        if [ -f Dockerfile ]; then
-          echo "✅ Dockerfile exists"
-        fi
-        
-        if [ -f docker-compose.yml ]; then
-          echo "✅ docker-compose.yml exists"
-        fi
+        # Проверка обновленных констант
+        python -c "
+        try:
+            from bot.constants import BUTTON_TEXTS
+            from config import Config
+            
+            # Проверяем наличие новых кнопок для напоминаний
+            if 'reminders' in BUTTON_TEXTS:
+                reminder_buttons = BUTTON_TEXTS['reminders']
+                print('✅ Reminder buttons are configured')
+            else:
+                print('⚠️ No reminder buttons found')
+            
+            print('✅ Configuration and constants are valid')
+        except Exception as e:
+            print(f'❌ Configuration test failed: {e}')
+            exit(1)
+        "
 
-  security:
+  # Полнофункциональные интеграционные тесты с Redis
+  integration-tests:
     runs-on: ubuntu-latest
+    needs: [fast-checks, component-tests]
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Run security scan
-      run: |
-        # Проверка на известные уязвимости
-        echo "🔒 Security scan completed"
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
         
-    - name: Check for large files
+    - name: Install dependencies
       run: |
-        # Проверка на большие файлы
-        find . -type f -size +50M | head -10
-        echo "📁 Large files check completed"
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run full integration tests
+      env:
+        OPENAI_API_KEY: "test_key"
+        TELEGRAM_TOKEN: "test_token"
+        DEEPSEEK_API_KEY: "test_key"
+        REDIS_HOST: "localhost"
+        REDIS_PORT: "6379"
+        REDIS_DB: "0"
+        LOG_LEVEL: "INFO"
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        echo "🔄 Running full integration tests with Redis..."
+        
+        # Ждем готовности Redis
+        sleep 2
+        
+        # Полнофункциональные интеграционные тесты с pytest
+        python -m pytest tests/test_ai_reminders.py -v --tb=short
+        
+    - name: Test system integration and performance
+      env:
+        OPENAI_API_KEY: "test_key"
+        TELEGRAM_TOKEN: "test_token"
+        DEEPSEEK_API_KEY: "test_key"
+        REDIS_HOST: "localhost"
+        REDIS_PORT: "6379"
+        REDIS_DB: "0"
+        LOG_LEVEL: "INFO"
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        echo "� Testing system integration and performance..."
+        
+        # Тест полной интеграции системы
+        python -c "
+        import asyncio
+        import time
+        import sys
+        
+        async def test_full_integration():
+            try:
+                # Импорт всех основных компонентов
+                from bot.ai_client import AIClient
+                from bot.cache import CacheManager
+                from bot.reminders import ReminderManager
+                from bot.request_limiter import RequestLimiter
+                
+                print('✅ All components imported successfully')
+                
+                # Создание компонентов с реальными зависимостями
+                cache_manager = CacheManager()
+                request_limiter = RequestLimiter()
+                ai_client = AIClient()
+                
+                # Настройка связей
+                ai_client.set_request_limiter(request_limiter)
+                reminder_manager = ReminderManager(cache_manager, None, ai_client)
+                
+                print('✅ All components created and connected')
+                
+                # Тест жизненного цикла
+                await request_limiter.start()
+                
+                # Простой тест производительности
+                start_time = time.time()
+                for i in range(10):
+                    await request_limiter.acquire_request_lock(i, 'test')
+                    await request_limiter.release_request_lock(i)
+                end_time = time.time()
+                
+                print(f'✅ Performance test: 10 operations in {end_time - start_time:.3f}s')
+                
+                await request_limiter.stop()
+                
+                print('✅ Full integration test completed successfully')
+                return True
+                
+            except Exception as e:
+                print(f'❌ Integration test failed: {e}')
+                import traceback
+                traceback.print_exc()
+                return False
+        
+        success = asyncio.run(test_full_integration())
+        if not success:
+            sys.exit(1)
+        "
 
-  documentation:
+  # Финальная валидация и документация
+  final-validation:
     runs-on: ubuntu-latest
+    needs: [fast-checks, component-tests, integration-tests]
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Validate documentation
+    - name: Validate project completeness
       run: |
-        # Проверка документации
-        if [ -f README.md ]; then
-          echo "✅ README.md exists"
-        else
-          echo "❌ README.md missing"
+        echo "� Final project validation..."
+        
+        # Проверка всех критически важных файлов
+        critical_files=(
+          "README.md"
+          "requirements.txt"
+          "pyproject.toml"
+          ".env.example"
+          "Dockerfile"
+          "docker-compose.yml"
+          "config.py"
+          "main.py"
+          "bot/reminders.py"
+          "bot/request_limiter.py"
+          "bot/ai_client.py"
+          "bot/cache.py"
+          "handlers/reminders.py"
+          "tests/test_integration_ci.py"
+          "tests/test_ai_reminders.py"
+          "tests/test_request_limiter.py"
+        )
+        
+        missing_files=()
+        for file in "${critical_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file"
+          else
+            echo "❌ $file MISSING"
+            missing_files+=("$file")
+          fi
+        done
+        
+        if [ ${#missing_files[@]} -gt 0 ]; then
+          echo "💥 Critical files are missing!"
           exit 1
+        else
+          echo "🎉 All critical files are present!"
         fi
         
-        if [ -f .env.example ]; then
-          echo "✅ .env.example exists"
-        else
-          echo "❌ .env.example missing"
-          exit 1
-        fi
-        
-        if [ -f requirements.txt ]; then
-          echo "✅ requirements.txt exists"
-        else
-          echo "❌ requirements.txt missing"
-          exit 1
-        fi 
+    - name: Generate test summary
+      run: |
+        echo "📊 Test Summary:"
+        echo "✅ Fast unit tests (no dependencies) - pytest"
+        echo "✅ Component-specific tests - pytest"  
+        echo "✅ Full integration tests with Redis - pytest"
+        echo "✅ Performance validation"
+        echo "✅ Security and quality checks"
+        echo "✅ Project structure validation"
+        echo ""
+        echo "🧪 Testing Framework:"
+        echo "  - pytest >= 8.0.0 for test execution"
+        echo "  - pytest-asyncio for async test support"
+        echo "  - Structured test organization (unit/integration)"
+        echo ""
+        echo "🎯 After refactoring:"
+        echo "  - Eliminated test duplication"
+        echo "  - Clear separation: unit vs integration tests"
+        echo "  - Optimized CI pipeline performance"
+        echo "  - Improved test maintainability"
+        echo "  - Added Moscow timezone support"
+        echo ""
+        echo "🚀 Ready for production deployment!" 

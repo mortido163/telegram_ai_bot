@@ -24,6 +24,7 @@ class AIClient:
         self.deepseek_url = Config.DEEPSEEK_URL
         self.max_retries = 3
         self.retry_delay = 1
+        self.request_limiter = None  # Будет установлен извне
 
     async def set_provider(self, provider: str) -> bool:
         if provider not in MODELS:
@@ -38,6 +39,35 @@ class AIClient:
         self.active_provider = provider
         logger.info(f"Provider changed to: {provider}")
         return True
+
+    def set_request_limiter(self, limiter):
+        """Устанавливает ограничитель запросов"""
+        self.request_limiter = limiter
+
+    async def get_response(self, prompt: str, user_id: int, role: str = DEFAULT_ROLE) -> str:
+        """
+        Универсальный метод для получения ответа от AI с защитой от множественных запросов
+        
+        Args:
+            prompt: Текст запроса
+            user_id: ID пользователя
+            role: Роль AI
+            
+        Returns:
+            str: Ответ от AI или сообщение об ошибке
+        """
+        # Проверяем ограничитель запросов
+        if self.request_limiter:
+            if not await self.request_limiter.acquire_request_lock(user_id, 'text'):
+                return "⏳ У вас уже есть активный запрос к AI. Пожалуйста, дождитесь его завершения."
+        
+        try:
+            response = await self.process_text(prompt, role)
+            return response
+        finally:
+            # Освобождаем блокировку
+            if self.request_limiter:
+                await self.request_limiter.release_request_lock(user_id)
 
     async def process_text(self, text: str, role: str = DEFAULT_ROLE) -> str:
         if role not in ROLES:
@@ -78,6 +108,32 @@ class AIClient:
                     await asyncio.sleep(self.retry_delay * (attempt + 1))
                 else:
                     return f"Ошибка обработки запроса: {str(e)}"
+
+    async def process_image_with_limit(self, image_bytes: bytes, user_id: int, prompt: str = None, role: str = DEFAULT_ROLE) -> str:
+        """
+        Обработка изображения с защитой от множественных запросов
+        
+        Args:
+            image_bytes: Байты изображения
+            user_id: ID пользователя
+            prompt: Текст запроса (опционально)
+            role: Роль AI
+            
+        Returns:
+            str: Ответ от AI или сообщение об ошибке
+        """
+        # Проверяем ограничитель запросов
+        if self.request_limiter:
+            if not await self.request_limiter.acquire_request_lock(user_id, 'image'):
+                return "⏳ У вас уже есть активный запрос к AI. Пожалуйста, дождитесь его завершения."
+        
+        try:
+            response = await self.process_image(image_bytes, prompt, role)
+            return response
+        finally:
+            # Освобождаем блокировку
+            if self.request_limiter:
+                await self.request_limiter.release_request_lock(user_id)
 
     async def process_image(self, image_bytes: bytes, prompt: str = None, role: str = DEFAULT_ROLE) -> str:
         if self.active_provider != "openai":
@@ -179,7 +235,7 @@ class AIClient:
             )
             return f"{response.model}: {response.choices[0].message.content}"
         except Exception as e:
-            logger.error(f"Error processing text with OpenAI: {e}")
+            logger.error(f"Error processing text with OpenRouter: {e}")
             return None
 
     async def _openai_vision(self, image_bytes: bytes, prompt: str) -> Optional[str]:
