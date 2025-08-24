@@ -32,8 +32,8 @@ def check_process_by_pid():
 
 def check_environment():
     """Проверяет переменные окружения"""
-    if not os.getenv('TELEGRAM_TOKEN'):
-        print("ERROR: Environment variable TELEGRAM_TOKEN not set")
+    if not os.getenv('TELEGRAM_BOT_TOKEN'):
+        print("ERROR: Environment variable TELEGRAM_BOT_TOKEN not set")
         return False
     
     return True
