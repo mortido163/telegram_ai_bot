@@ -31,6 +31,7 @@ async def list_user_reminders(callback: types.CallbackQuery, **kwargs):
             builder = InlineKeyboardBuilder()
             builder.button(text="📝 Создать напоминание", callback_data="create_reminder")
             builder.button(text="🔙 Назад", callback_data="reminders_menu")
+            builder.button(text="❌ Закрыть", callback_data="close_reminders")
             builder.adjust(1)
             
         else:
@@ -81,6 +82,7 @@ async def list_user_reminders(callback: types.CallbackQuery, **kwargs):
             
             builder.button(text="📝 Создать новое", callback_data="create_reminder")
             builder.button(text="🔙 Назад", callback_data="reminders_menu")
+            builder.button(text="❌ Закрыть", callback_data="close_reminders")
             builder.adjust(1)
         
         await safe_edit_message(callback, text, reply_markup=builder.as_markup())
@@ -169,6 +171,7 @@ async def view_reminder_details(callback: types.CallbackQuery, **kwargs):
             builder.button(text="🗑 Удалить", callback_data=f"delete_reminder_{reminder.id}")
         
         builder.button(text="📋 К списку", callback_data="list_reminders")
+        builder.button(text="❌ Закрыть", callback_data="close_reminders")
         builder.adjust(2, 1)
         
         await safe_edit_message(callback, text, reply_markup=builder.as_markup())
@@ -262,6 +265,7 @@ async def confirm_delete_reminder(callback: types.CallbackQuery, **kwargs):
         builder = InlineKeyboardBuilder()
         builder.button(text="🗑 Да, удалить", callback_data=f"confirm_delete_{reminder_id}")
         builder.button(text="❌ Отмена", callback_data=f"view_reminder_{reminder_id}")
+        builder.button(text="❌ Закрыть", callback_data="close_reminders")
         builder.adjust(1)
         
         await safe_edit_message(callback, text, reply_markup=builder.as_markup())
@@ -287,6 +291,7 @@ async def delete_reminder(callback: types.CallbackQuery, **kwargs):
             builder = InlineKeyboardBuilder()
             builder.button(text="📋 Мои напоминания", callback_data="list_reminders")
             builder.button(text="📝 Создать новое", callback_data="create_reminder")
+            builder.button(text="❌ Закрыть", callback_data="close_reminders")
             builder.adjust(1)
             
             await safe_edit_message(callback, text, reply_markup=builder.as_markup())

@@ -60,6 +60,7 @@ async def cmd_reminders(message: types.Message, state: FSMContext, **kwargs):
     builder.button(text="📝 Создать напоминание", callback_data="create_reminder")
     builder.button(text="📋 Мои напоминания", callback_data="list_reminders")
     builder.button(text="⚙️ Настройки", callback_data="reminder_settings")
+    builder.button(text="❌ Закрыть", callback_data="close_reminders")
     builder.adjust(1)
     
     text = (
@@ -79,6 +80,7 @@ async def show_reminders_menu(callback: types.CallbackQuery, state: FSMContext):
     builder.button(text="📝 Создать напоминание", callback_data="create_reminder")
     builder.button(text="📋 Мои напоминания", callback_data="list_reminders")
     builder.button(text="⚙️ Настройки", callback_data="reminder_settings")
+    builder.button(text="❌ Закрыть", callback_data="close_reminders")
     builder.adjust(1)
     
     text = (
@@ -110,6 +112,15 @@ async def show_reminder_settings(callback: types.CallbackQuery):
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🔙 Назад", callback_data="reminders_menu")
+    builder.button(text="❌ Закрыть", callback_data="close_reminders")
+    builder.adjust(1)
     
     await safe_edit_message(callback, text, reply_markup=builder.as_markup())
     await callback.answer()
+
+
+@router.callback_query(F.data == "close_reminders")
+async def close_reminders(callback: types.CallbackQuery, state: FSMContext):
+    """Закрывает интерфейс напоминаний"""
+    await state.clear()
+    await callback.message.delete()

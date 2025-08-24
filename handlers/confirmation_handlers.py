@@ -167,6 +167,7 @@ async def confirm_reminder_creation(callback: types.CallbackQuery, state: FSMCon
         builder = InlineKeyboardBuilder()
         builder.button(text="📋 Мои напоминания", callback_data="list_reminders")
         builder.button(text="➕ Создать еще", callback_data="create_reminder")
+        builder.button(text="❌ Закрыть", callback_data="close_reminders")
         builder.adjust(1)
         
         await safe_edit_message(callback, text, reply_markup=builder.as_markup())
@@ -185,6 +186,8 @@ async def cancel_reminder_creation(callback: types.CallbackQuery, state: FSMCont
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🔔 Главное меню", callback_data="reminders_menu")
+    builder.button(text="❌ Закрыть", callback_data="close_reminders")
+    builder.adjust(1)
     
     await safe_edit_message(callback, text, reply_markup=builder.as_markup())
     await callback.answer()

@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from bot.ai_client import AIClient
 from bot.owner_manager import OwnerManager
@@ -52,6 +53,15 @@ dp.include_router(reminders_router)
 dp.include_router(settings_router)
 dp.include_router(ai_router)
 
+async def setup_bot_commands(bot: Bot):
+    """Настройка команд бота в меню"""
+    commands = [
+        BotCommand(command="start", description="🚀 Запустить бота"),
+        BotCommand(command="reminders", description="🔔 Управление напоминаниями"),
+        BotCommand(command="settings", description="⚙️ Настройка AI-модели"),
+    ]
+    await bot.set_my_commands(commands)
+
 async def startup(dispatcher: Dispatcher):
     """Startup actions"""
     try:
@@ -59,6 +69,9 @@ async def startup(dispatcher: Dispatcher):
         import os
         with open('/tmp/bot.pid', 'w') as f:
             f.write(str(os.getpid()))
+            
+        # Настраиваем команды бота
+        await setup_bot_commands(bot)
             
         # Validate configuration
         Config.validate()
