@@ -2,12 +2,27 @@ import pickle
 import redis
 import logging
 from datetime import timedelta
-from typing import Optional, Any
+from typing import Optional, Any, Union
 from config import Config
 
 logger = logging.getLogger(__name__)
 
 class CacheManager:
+    # Предустановленные TTL для разных типов данных
+    TTL_CONFIGS = {
+        # Напоминания - бессрочно (очень долго)
+        "reminder": None,  # Без TTL (бессрочно)
+        "user_reminders": None,  # Без TTL (бессрочно)
+        "global": None,  # Без TTL (бессрочно)
+        
+        # AI кэш - 1 час
+        "ai_text": timedelta(hours=1),
+        "ai_image": timedelta(hours=1),
+        
+        # По умолчанию - из конфига
+        "default": timedelta(seconds=Config.CACHE_TTL)
+    }
+    
     def __init__(self):
         try:
             self.redis = redis.from_url(Config.REDIS_URL)
@@ -18,7 +33,19 @@ class CacheManager:
             logger.error(f"Failed to connect to Redis: {e}")
             self.redis = None
         
+        # Устаревший TTL для обратной совместимости
         self.ttl = timedelta(seconds=Config.CACHE_TTL)
+
+    def _get_ttl_for_prefix(self, prefix: str) -> Optional[Union[int, timedelta]]:
+        """Возвращает TTL для конкретного префикса"""
+        ttl_config = self.TTL_CONFIGS.get(prefix, self.TTL_CONFIGS["default"])
+        
+        if ttl_config is None:
+            return None  # Бессрочное хранение
+        elif isinstance(ttl_config, timedelta):
+            return ttl_config
+        else:
+            return self.TTL_CONFIGS["default"]
 
     def _generate_key(self, prefix: str, identifier: str) -> str:
         return f"{prefix}:{identifier}"
@@ -38,14 +65,29 @@ class CacheManager:
             logger.error(f"Error getting from cache: {e}")
             return None
 
-    async def set(self, prefix: str, identifier: str, data: Any) -> bool:
+    async def set(self, prefix: str, identifier: str, data: Any, custom_ttl: Optional[Union[int, timedelta]] = None) -> bool:
         if not self.redis:
             return False
             
         try:
             key = self._generate_key(prefix, identifier)
-            self.redis.setex(key, self.ttl, pickle.dumps(data))
-            logger.debug(f"Cache set for key: {key}")
+            
+            # Определяем TTL
+            if custom_ttl is not None:
+                ttl = custom_ttl
+            else:
+                ttl = self._get_ttl_for_prefix(prefix)
+            
+            # Сохраняем данные
+            if ttl is None:
+                # Бессрочное хранение
+                self.redis.set(key, pickle.dumps(data))
+                logger.debug(f"Cache set permanently for key: {key}")
+            else:
+                # С ограниченным временем жизни
+                self.redis.setex(key, ttl, pickle.dumps(data))
+                logger.debug(f"Cache set for key: {key} with TTL: {ttl}")
+            
             return True
         except Exception as e:
             logger.error(f"Error setting cache: {e}")

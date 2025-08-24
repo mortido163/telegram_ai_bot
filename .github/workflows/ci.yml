@@ -132,6 +132,28 @@ jobs:
         # Запуск специализированных тестов ограничителя с pytest
         python -m pytest tests/test_request_limiter.py -v --tb=short
         
+    - name: Test image encoding and processing
+      env:
+        OPENAI_API_KEY: "test_key"
+        TELEGRAM_TOKEN: "test_token"
+        DEEPSEEK_API_KEY: "test_key"
+        REDIS_HOST: "dummy"
+        REDIS_PORT: "6379"
+        REDIS_DB: "0"
+        LOG_LEVEL: "INFO"
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        echo "🖼️ Testing image encoding/decoding and Telegram integration..."
+        
+        # Тесты кодирования изображений для AI клиента
+        python -m pytest tests/test_image_encoding.py::TestImageEncoding -v --tb=short
+        
+        # Тесты обработки изображений как в Telegram боте
+        python -m pytest tests/test_image_encoding.py::TestTelegramImageHandling -v --tb=short
+        
+        # Тесты типов данных Telegram API
+        python -m pytest tests/test_image_encoding.py::TestTelegramAPIDataTypes -v --tb=short
+        
     - name: Test FSM states and handlers
       env:
         OPENAI_API_KEY: "test_key"
@@ -260,6 +282,9 @@ jobs:
         # Полнофункциональные интеграционные тесты с pytest
         python -m pytest tests/test_ai_reminders.py -v --tb=short
         
+        # Интеграционные тесты обработки изображений
+        python -m pytest tests/test_image_encoding.py::TestImageEncodingIntegration -v --tb=short
+        
     - name: Test system integration and performance
       env:
         OPENAI_API_KEY: "test_key"
@@ -359,6 +384,7 @@ jobs:
           "tests/test_integration_ci.py"
           "tests/test_ai_reminders.py"
           "tests/test_request_limiter.py"
+          "tests/test_image_encoding.py"
         )
         
         missing_files=()
@@ -383,6 +409,7 @@ jobs:
         echo "📊 Test Summary:"
         echo "✅ Fast unit tests (no dependencies) - pytest"
         echo "✅ Component-specific tests - pytest"  
+        echo "✅ Image encoding/decoding tests - pytest"
         echo "✅ Full integration tests with Redis - pytest"
         echo "✅ Performance validation"
         echo "✅ Security and quality checks"
@@ -392,6 +419,7 @@ jobs:
         echo "  - pytest >= 8.0.0 for test execution"
         echo "  - pytest-asyncio for async test support"
         echo "  - Structured test organization (unit/integration)"
+        echo "  - PIL/Pillow for image processing tests"
         echo ""
         echo "🎯 After refactoring:"
         echo "  - Eliminated test duplication"
@@ -399,5 +427,7 @@ jobs:
         echo "  - Optimized CI pipeline performance"
         echo "  - Improved test maintainability"
         echo "  - Added Moscow timezone support"
+        echo "  - Added comprehensive image processing tests"
+        echo "  - Added Telegram API data type validation"
         echo ""
         echo "🚀 Ready for production deployment!" 

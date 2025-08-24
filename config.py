@@ -17,7 +17,8 @@ class Config:
     OPENROUTER_URL = os.getenv("OPENROUTER_URL", "https://openrouter.ai/api/v1")
     
     # Настройки Моделей
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+    OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-5-nano")
+    OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-4-vision-preview")
     OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/auto")
     
     # Настройки Redis

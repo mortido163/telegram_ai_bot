@@ -50,7 +50,5 @@ DEFAULT_PROMPT = "Опиши это изображение подробно."
 MAX_MESSAGE_LENGTH = 4000  # Лимит Telegram для одного сообщения
 IMAGE_SIZE_LIMIT_MB = 10   # Макс. размер изображения
 
-CACHE_PREFIX_TEXT = "text:"
-CACHE_PREFIX_IMAGE = "image:"
-
-CACHE_TTL_HOURS = 1
+CACHE_PREFIX_TEXT = "ai_text"
+CACHE_PREFIX_IMAGE = "ai_image"

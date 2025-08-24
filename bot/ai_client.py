@@ -5,7 +5,7 @@ import io
 import logging
 import time
 from .cache import CacheManager
-from .constants import DEFAULT_MODEL, DEFAULT_ROLE, DEFAULT_PROMPT, MODELS, ROLES, CACHE_PREFIX_TEXT, CACHE_PREFIX_IMAGE
+from .constants import DEFAULT_MODEL, DEFAULT_ROLE, DEFAULT_PROMPT, MODELS, ROLES, CACHE_PREFIX_TEXT, CACHE_PREFIX_IMAGE, IMAGE_SIZE_LIMIT_MB
 from .metrics import metrics
 from config import Config
 from openai import AsyncOpenAI
@@ -139,6 +139,11 @@ class AIClient:
         if self.active_provider != "openai":
             return "Извините, обработка изображений пока доступна только через OpenAI"
 
+        # Валидация изображения
+        is_valid, validation_message = self.validate_image(image_bytes)
+        if not is_valid:
+            return f"Ошибка валидации изображения: {validation_message}"
+
         if role not in ROLES:
             role = DEFAULT_ROLE
 
@@ -176,15 +181,15 @@ class AIClient:
 
     async def _openai_text(self, text: str, role: str) -> Optional[str]:
         try:
-            response = await aclient.chat.completions.create(
-                model=Config.OPENAI_MODEL,
-                messages=[
+            response = await aclient.responses.create(
+                model=Config.OPENAI_TEXT_MODEL,
+                input=[
                     {"role": "system", "content": ROLES[role]},
                     {"role": "user", "content": text}
                 ],
-                max_tokens=1000
+                max_output_tokens=1000
             )
-            return response.choices[0].message.content
+            return response.output_text
         except Exception as e:
             logger.error(f"Error processing text with OpenAI: {e}")
             return None
@@ -224,16 +229,16 @@ class AIClient:
 
     async def _openrouter_text(self, text: str, role: str) -> Optional[str]:
         try:
-            response = await or_client.chat.completions.create(
-                model=Config.OPENAI_MODEL,
+            response = await or_client.responses.create(
+                model=Config.OPENROUTER_MODEL,
                 extra_body={},
-                messages=[
+                input=[
                     {"role": "system", "content": ROLES[role]},
                     {"role": "user", "content": text}
                 ],
-                max_tokens=1000
+                max_output_tokens=1000
             )
-            return f"{response.model}: {response.choices[0].message.content}"
+            return f"{response.model}: {response.output_text}"
         except Exception as e:
             logger.error(f"Error processing text with OpenRouter: {e}")
             return None
@@ -244,10 +249,10 @@ class AIClient:
             buffered = io.BytesIO()
             image_b64.save(buffered, format="PNG")
             image_b64_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-            
-            response = await aclient.chat.completions.create(
-                model="gpt-4-vision-preview",
-                messages=[
+
+            response = await aclient.responses.create(
+                model=Config.OPENAI_IMAGE_MODEL,
+                input=[
                     {
                         "role": "user",
                         "content": [
@@ -259,9 +264,45 @@ class AIClient:
                         ],
                     }
                 ],
-                max_tokens=1000
+                max_output_tokens=1000
             )
-            return response.choices[0].message.content
+            return response.output_text
         except Exception as e:
             logger.error(f"Error processing image with OpenAI Vision: {e}")
             return None
+
+    def validate_image(self, image_bytes: bytes) -> tuple[bool, str]:
+        """
+        Валидация изображения для обработки
+        
+        Args:
+            image_bytes: Байты изображения
+            
+        Returns:
+            tuple[bool, str]: (валидно, сообщение об ошибке)
+        """
+        try:
+            # Проверяем размер
+            size_mb = len(image_bytes) / (1024 * 1024)
+            if size_mb > IMAGE_SIZE_LIMIT_MB:
+                return False, f"Изображение слишком большое ({size_mb:.1f} MB). Максимум {IMAGE_SIZE_LIMIT_MB} MB"
+            
+            # Проверяем, что это действительно изображение
+            image = Image.open(io.BytesIO(image_bytes))
+            
+            # Проверяем разрешение
+            width, height = image.size
+            if width < 10 or height < 10:
+                return False, "Изображение слишком маленькое (минимум 10x10 пикселей)"
+            
+            if width > 4096 or height > 4096:
+                return False, "Изображение слишком большое (максимум 4096x4096 пикселей)"
+            
+            # Проверяем формат
+            if image.format not in ['PNG', 'JPEG', 'JPG', 'BMP', 'GIF']:
+                return False, f"Неподдерживаемый формат изображения: {image.format}"
+            
+            return True, "OK"
+            
+        except Exception as e:
+            return False, f"Ошибка при обработке изображения: {str(e)}"
